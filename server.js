@@ -129,23 +129,37 @@ app.get("/api/users/:id", protect, async (req, res) => {
 });
 
 // POSTS
+app.get("/api/posts", protect, async (req, res) => {
+  try {
+    const posts = await postsCollection
+      .find({
+        $or: [
+          { privacy: { $in: ["public", null] } }, // treat null/missing as public
+          { userId: req.user._id.toString(), privacy: "private" }
+        ],
+      })
+      .sort({ createdAt: -1 })
+      .toArray();
 
+    const postsWithLikes = await Promise.all(
+      posts.map(async (post) => {
+        const likeUsers = await usersCollection
+          .find({ _id: { $in: (post.likes || []).map(id => new ObjectId(id)) } })
+          .project({ firstname: 1, lastname: 1 })
+          .toArray();
+        return { ...post, likeUsers };
+      })
+    );
 
-app.get("/api/posts", async (req, res) => {
-  const posts = await postsCollection.find().sort({ createdAt: -1 }).toArray();
-
-  const postsWithLikes = await Promise.all(
-    posts.map(async (post) => {
-      const likeUsers = await usersCollection
-        .find({ _id: { $in: post.likes.map(id => new ObjectId(id)) } })
-        .project({ firstname: 1, lastname: 1 })
-        .toArray();
-      return { ...post, likeUsers };
-    })
-  );
-
-  res.json(postsWithLikes);
+    res.json(postsWithLikes);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Failed to fetch posts" });
+  }
 });
+
+
+
 
 
 app.get("/api/posts/:id", async (req, res) => {
@@ -163,10 +177,9 @@ app.get("/api/posts/:id", async (req, res) => {
   res.json({ ...post, likeUsers });
 });
 
-
 app.post("/api/posts", protect, async (req, res) => {
   try {
-    const { content, imageBase64 } = req.body;
+    const { content, imageBase64, privacy } = req.body; // <-- add privacy here
 
     let imageUrl = "";
     if (imageBase64) {
@@ -179,6 +192,7 @@ app.post("/api/posts", protect, async (req, res) => {
       posterName: `${req.user.firstname} ${req.user.lastname}`,
       content,
       image: imageUrl,
+      privacy: privacy || "public", // <-- store privacy
       likes: [],
       createdAt: new Date(),
     };
