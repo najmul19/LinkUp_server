@@ -272,11 +272,20 @@ app.post("/api/posts/:id/like", protect, async (req, res) => {
       { $push: { likes: req.user._id.toString() } }
     );
   }
+
+
   const updatedPost = await postsCollection.findOne({
     _id: new ObjectId(req.params.id),
   });
-  res.json(updatedPost.likes);
+
+  const likeUsers = await usersCollection
+    .find({ _id: { $in: updatedPost.likes.map(id => new ObjectId(id)) } })
+    .project({ firstname: 1, lastname: 1 })
+    .toArray();
+
+  res.json({ ...updatedPost, likeUsers });
 });
+
 
 
 app.get("/api/comments/:postId", async (req, res) => {
