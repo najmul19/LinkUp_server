@@ -16,19 +16,19 @@ const MONGO_URI = process.env.MONGO_URI;
 const JWT_SECRET = process.env.JWT_SECRET;
 const IMGBB_API_KEY = process.env.IMGBB_API_KEY;
 
-
 // MIDDLEWARES
 app.use(express.json({ limit: "10mb" }));
 app.use(cors());
 app.use(helmet());
 app.use(rateLimit({ windowMs: 15 * 60 * 1000, max: 100 }));
 
-// MONGO CONNECTION 
+// MONGO CONNECTION
 const client = new MongoClient(MONGO_URI);
 let db;
 let usersCollection;
 let postsCollection;
 let commentsCollection;
+let storiesCollection;
 
 client
   .connect()
@@ -37,6 +37,7 @@ client
     usersCollection = db.collection("users");
     postsCollection = db.collection("posts");
     commentsCollection = db.collection("comments");
+    storiesCollection = db.collection("stories");
 
     app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
   })
@@ -67,7 +68,6 @@ const protect = async (req, res, next) => {
     res.status(401).json({ message: "Token invalid" });
   }
 };
-
 
 app.post("/api/auth/register", async (req, res) => {
   const { firstname, lastname, email, password } = req.body;
@@ -135,7 +135,7 @@ app.get("/api/posts", protect, async (req, res) => {
       .find({
         $or: [
           { privacy: { $in: ["public", null] } }, // treat null/missing as public
-          { userId: req.user._id.toString(), privacy: "private" }
+          { userId: req.user._id.toString(), privacy: "private" },
         ],
       })
       .sort({ createdAt: -1 })
@@ -144,7 +144,9 @@ app.get("/api/posts", protect, async (req, res) => {
     const postsWithLikes = await Promise.all(
       posts.map(async (post) => {
         const likeUsers = await usersCollection
-          .find({ _id: { $in: (post.likes || []).map(id => new ObjectId(id)) } })
+          .find({
+            _id: { $in: (post.likes || []).map((id) => new ObjectId(id)) },
+          })
           .project({ firstname: 1, lastname: 1 })
           .toArray();
         return { ...post, likeUsers };
@@ -158,19 +160,14 @@ app.get("/api/posts", protect, async (req, res) => {
   }
 });
 
-
-
-
-
 app.get("/api/posts/:id", async (req, res) => {
   const post = await postsCollection.findOne({
     _id: new ObjectId(req.params.id),
   });
   if (!post) return res.status(404).json({ message: "Post not found" });
 
-  // Fetch user details for likes
   const likeUsers = await usersCollection
-    .find({ _id: { $in: post.likes.map(id => new ObjectId(id)) } })
+    .find({ _id: { $in: post.likes.map((id) => new ObjectId(id)) } })
     .project({ firstname: 1, lastname: 1 })
     .toArray();
 
@@ -199,7 +196,6 @@ app.post("/api/posts", protect, async (req, res) => {
 
     const result = await postsCollection.insertOne(post);
     res.status(201).json({ _id: result.insertedId, ...post });
-
   } catch (err) {
     console.error("UPLOAD ERROR:", err.response?.data || err.message);
     res.status(400).json({ message: "Upload failed", error: err.message });
@@ -218,7 +214,7 @@ app.post("/api/posts/:id/share", protect, async (req, res) => {
     posterName: `${req.user.firstname} ${req.user.lastname}`,
     content: originalPost.content,
     image: originalPost.image,
-    sharedFrom: originalPost._id, 
+    sharedFrom: originalPost._id,
     likes: [],
     createdAt: new Date(),
   };
@@ -234,7 +230,7 @@ app.get("/api/posts/:id", async (req, res) => {
   if (!post) return res.status(404).json({ message: "Post not found" });
 
   const likeUsers = await usersCollection
-    .find({ _id: { $in: post.likes.map(id => new ObjectId(id)) } })
+    .find({ _id: { $in: post.likes.map((id) => new ObjectId(id)) } })
     .project({ firstname: 1, lastname: 1 })
     .toArray();
 
@@ -254,7 +250,6 @@ app.post("/api/comments/:postId", protect, async (req, res) => {
   const result = await commentsCollection.insertOne(comment);
   res.status(201).json({ _id: result.insertedId, ...comment });
 });
-
 
 app.delete("/api/posts/:id", protect, async (req, res) => {
   const post = await postsCollection.findOne({
@@ -287,20 +282,17 @@ app.post("/api/posts/:id/like", protect, async (req, res) => {
     );
   }
 
-
   const updatedPost = await postsCollection.findOne({
     _id: new ObjectId(req.params.id),
   });
 
   const likeUsers = await usersCollection
-    .find({ _id: { $in: updatedPost.likes.map(id => new ObjectId(id)) } })
+    .find({ _id: { $in: updatedPost.likes.map((id) => new ObjectId(id)) } })
     .project({ firstname: 1, lastname: 1 })
     .toArray();
 
   res.json({ ...updatedPost, likeUsers });
 });
-
-
 
 app.get("/api/comments/:postId", async (req, res) => {
   const comments = await commentsCollection
@@ -320,7 +312,6 @@ app.get("/api/comments/:postId", async (req, res) => {
   res.json(commentsWithUser);
 });
 
-
 app.post("/api/comments/:postId", protect, async (req, res) => {
   const { content, parentCommentId } = req.body;
   const comment = {
@@ -332,13 +323,12 @@ app.post("/api/comments/:postId", protect, async (req, res) => {
     createdAt: new Date(),
   };
   const result = await commentsCollection.insertOne(comment);
-  res.status(201).json({ 
-    _id: result.insertedId, 
-    ...comment, 
-    userName: `${req.user.firstname} ${req.user.lastname}` 
+  res.status(201).json({
+    _id: result.insertedId,
+    ...comment,
+    userName: `${req.user.firstname} ${req.user.lastname}`,
   });
 });
-
 
 app.post("/api/comments/:id/like", protect, async (req, res) => {
   const comment = await commentsCollection.findOne({
@@ -362,6 +352,67 @@ app.post("/api/comments/:id/like", protect, async (req, res) => {
     _id: new ObjectId(req.params.id),
   });
   res.json(updatedComment.likes);
+});
+
+// GET all stories
+app.get("/api/stories", protect, async (req, res) => {
+  try {
+    const stories = await db
+      .collection("stories")
+      .find({
+        $or: [
+          { privacy: { $in: ["public", null] } }, 
+          { userId: req.user._id.toString() }, 
+        ],
+      })
+      .sort({ createdAt: -1 })
+      .toArray();
+
+    const storiesWithUser = await Promise.all(
+      stories.map(async (story) => {
+        const user = await usersCollection.findOne(
+          { _id: new ObjectId(story.userId) },
+          { projection: { firstname: 1, lastname: 1 } }
+        );
+        return {
+          ...story,
+          userName: user ? `${user.firstname} ${user.lastname}` : "User",
+        };
+      })
+    );
+    res.json(storiesWithUser);
+
+    res.json(storiesWithUser);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Failed to fetch stories" });
+  }
+});
+
+// POST create a story
+app.post("/api/stories", protect, async (req, res) => {
+  try {
+    const { imageBase64, content, privacy } = req.body;
+
+    let imageUrl = "";
+    if (imageBase64) {
+      imageUrl = await uploadToImgBB(imageBase64); 
+    }
+
+    const story = {
+      userId: req.user._id.toString(),
+      content: content || "",
+      image: imageUrl, 
+      privacy: privacy || "public",
+      createdAt: new Date(),
+    };
+
+    const result = await storiesCollection.insertOne(story);
+    res.status(201).json({ _id: result.insertedId, ...story });
+  } catch (err) {
+    console.error(err);
+    res.status(400).json({ message: "Failed to create story" });
+  }
 });
 
 //ROOT
