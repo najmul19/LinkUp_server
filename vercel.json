@@ -2,14 +2,14 @@
   "version": 2,
   "builds": [
     {
-      "src": "BUDDY_SCRIPT_BACKEND/index.js",
+      "src": "index.js",
       "use": "@vercel/node"
     }
   ],
   "routes": [
     {
       "src": "/(.*)",
-      "dest": "BUDDY_SCRIPT_BACKEND/index.js"
+      "dest": "index.js"
     }
   ]
 }
