@@ -38,8 +38,9 @@ client
     postsCollection = db.collection("posts");
     commentsCollection = db.collection("comments");
     storiesCollection = db.collection("stories");
+    // module.exports = app;
 
-    app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+    // app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
   })
   .catch((err) => console.log(err));
 
@@ -160,19 +161,6 @@ app.get("/api/posts", protect, async (req, res) => {
   }
 });
 
-app.get("/api/posts/:id", async (req, res) => {
-  const post = await postsCollection.findOne({
-    _id: new ObjectId(req.params.id),
-  });
-  if (!post) return res.status(404).json({ message: "Post not found" });
-
-  const likeUsers = await usersCollection
-    .find({ _id: { $in: post.likes.map((id) => new ObjectId(id)) } })
-    .project({ firstname: 1, lastname: 1 })
-    .toArray();
-
-  res.json({ ...post, likeUsers });
-});
 
 app.post("/api/posts", protect, async (req, res) => {
   try {
@@ -222,7 +210,6 @@ app.post("/api/posts/:id/share", protect, async (req, res) => {
   const result = await postsCollection.insertOne(sharedPost);
   res.status(201).json({ _id: result.insertedId, ...sharedPost });
 });
-
 app.get("/api/posts/:id", async (req, res) => {
   const post = await postsCollection.findOne({
     _id: new ObjectId(req.params.id),
@@ -236,6 +223,20 @@ app.get("/api/posts/:id", async (req, res) => {
 
   res.json({ ...post, likeUsers });
 });
+
+// app.get("/api/posts/:id", async (req, res) => {
+//   const post = await postsCollection.findOne({
+//     _id: new ObjectId(req.params.id),
+//   });
+//   if (!post) return res.status(404).json({ message: "Post not found" });
+
+//   const likeUsers = await usersCollection
+//     .find({ _id: { $in: post.likes.map((id) => new ObjectId(id)) } })
+//     .project({ firstname: 1, lastname: 1 })
+//     .toArray();
+
+//   res.json({ ...post, likeUsers });
+// });
 
 app.post("/api/comments/:postId", protect, async (req, res) => {
   const { content, parentCommentId } = req.body;
@@ -361,8 +362,8 @@ app.get("/api/stories", protect, async (req, res) => {
       .collection("stories")
       .find({
         $or: [
-          { privacy: { $in: ["public", null] } }, 
-          { userId: req.user._id.toString() }, 
+          { privacy: { $in: ["public", null] } },
+          { userId: req.user._id.toString() },
         ],
       })
       .sort({ createdAt: -1 })
@@ -396,13 +397,13 @@ app.post("/api/stories", protect, async (req, res) => {
 
     let imageUrl = "";
     if (imageBase64) {
-      imageUrl = await uploadToImgBB(imageBase64); 
+      imageUrl = await uploadToImgBB(imageBase64);
     }
 
     const story = {
       userId: req.user._id.toString(),
       content: content || "",
-      image: imageUrl, 
+      image: imageUrl,
       privacy: privacy || "public",
       createdAt: new Date(),
     };
@@ -419,3 +420,5 @@ app.post("/api/stories", protect, async (req, res) => {
 app.get("/", (req, res) => {
   res.send("Backend is running!");
 });
+
+module.exports = app;
